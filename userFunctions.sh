@@ -10,6 +10,7 @@ IFS=$'\n'
 
 # Import useful shell commands
 source ~/Documents/DEV/mobile-scripts/process-utility/textStyles.sh
+source ~/Documents/DEV/useful-scripts/shell-scripts/git.sh
 
 function returnToBase
 {
@@ -22,7 +23,7 @@ function returnToBase
   echo -e $blueText"-----------------------------------------------------------"$normalText
   echo
   echo "> Which branch is base? (type 'x' to chicken out, or leave blank to use current branch)"
-  read -p "" baseBranch
+  read "baseBranch?"
   
   if [ "$baseBranch" != "x" ] 
   then 
@@ -55,9 +56,9 @@ function deepClean
   
   echo -e $blueText"You should close your IDE before continuing"$normalText
   echo -e $redText"Are you sure? (y/n)"$normalText
-  read -p "" confirm
+  read  "confirm?"
 
-  if [ "$confirm" == "y" ] 
+  if [[ "$confirm" =~ ^[Yy]$ ]]
   then
     git clean -dfx
     git reset --hard
@@ -122,6 +123,8 @@ function verify
     else
       ./gradlew testQaRelease
     fi    
+
+    open sdk/tests/build/reports/tests/testQaReleaseUnitTest/index.html
   elif [[ "$currentFolder" == *foresee-sdk-ios* ]]
   then
     if [[ "$confirm" =~ ^[Yy]$ ]]
@@ -148,55 +151,117 @@ function buildAndRun
   fi
 }
 
-function whatDidIForget
+function remindMe
 {
-  # initializers
-  lastFileLine=""
-  lastPositionLine=""
-  baseBranch="core"
-
-  echo 
-  echo "Let's take a look..."
-  echo
-  
-  # Grep strings
-  positionLineId="@@"
-  addLineId="+++"
-  todoLineId="TODO"
-
-  # some funky zsh to get the git output as an array, grepped to find the right lines
-  rawOutputArray=("${(@f)$(git diff $baseBranch | grep "\($addLineId\)\|\($todoLineId\)\|\($positionLineId\)" )}")
-
-  # string replacement regexes
-  toRemoveFromAddLine="+++\ b/"        
-  toRemoveFromPositionLineStart="^.*+"
-  toRemoveFromPositionLineEnd=" @@.*"
-  toRemoveFromTodoLineStart="\+ *"
-
-  for line ("$rawOutputArray[@]")
-  do
-    fileAddLine=$(echo $line | grep $addLineId | sed s/$toRemoveFromAddLine/g)
-    if [[ "${#fileAddLine}" != 0 ]]
-    then
-      lastFileLine="$fileAddLine"
-    fi
-
-    positionLine=$(echo $line | grep $positionLineId  | sed s/$toRemoveFromPositionLineStart//g | sed s/$toRemoveFromPositionLineEnd//g)
-    if [[ "${#positionLine}" != 0 ]]
-    then
-      lastPositionLine="$positionLine"
-    fi
-
-    todoLine=$(echo $line | grep $todoLineId | sed s/$toRemoveFromTodoLineStart//g)
-    if [[ "${#todoLine}" != 0 ]]
-    then
-      echo -e "$blueText$lastFileLine:[$lastPositionLine]$normalText"
-      echo "$redText$todoLine$normalText"
-      echo
-    fi
-
-  done
-
-  # echo
+  currentFolder=$(pwd)
+  if [[ "$currentFolder" == *"foresee-sdk-android"* ]]
+  then
+    whatDidIForget core
+  elif [[ "$currentFolder" == *"foresee-sdk-ios"* ]]
+  then
+    whatDidIForget core
+  elif [[ "$currentFolder" == *"djfx-ios"* ]]
+  then
+    whatDidIForget develop
+  elif [[ "$currentFolder" == *"djfx"* ]]
+  then
+    whatDidIForget core
+  else
+    echo -e $redText"\nRepo not recognized...\n"$normalText
+  fi
 }
 
+function droidLogs
+{
+  searchPhrase=$1
+  adb logcat -d -t 1000000000 -e ".*"$searchPhrase".*"
+}
+
+function videoLinks
+{
+  adb logcat -d -t 1000000 | grep "Video Metadata" | sed 's/.*uuid\\:\\/http:\/\/\mpathy-video-mobilesdk.s3.amazonaws.com\//g' | sed 's/\\,\\.*//g'
+}
+
+function quickTests
+{
+  filename=$1
+  ./gradlew sdk:tests:testQaDebugUnitTest --tests "**$filename*" --rerun-tasks
+}
+
+# Test a command 100 times and drop out if failed, quoting number of successful attempts
+function soak
+{
+  numTests=0
+  command=$1
+  while "$command"
+  do numTests=numTests+1
+  done
+
+  echo "Tested $numTests times"
+}
+
+function releaseNotes
+{
+  startTag=$1
+  stopTag=$2
+  ticketList=$( git log --pretty=oneline $startTag..$stopTag | grep -o -E "[A-Z]+-[0-9]+" )
+
+  sortedUniqueTickets=($(echo "${ticketList[@]}" | sort -u ))
+ 
+  outputTicketList "${sortedUniqueTickets[@]}"
+}
+
+# Returns All tickets which modified a file/folder containing "Test"
+# Usage:  testingTickets <date>
+# E.g.    testingTickets 2022-03-01
+function testingTickets 
+{
+  date=$1
+  
+  ticketList=$( git log --after $1 "**Test*" | grep -o -E "[A-Z]+-[0-9]+" )
+
+  sortedUniqueTickets=($(echo "${ticketList[@]}" | sort -u ))
+
+  outputTicketList "${sortedUniqueTickets[@]}"
+}
+
+# Returns a formatted list of Jira tickets, including links and JQL filter
+# Usage: outputTicketList <arrayOfTickets>
+function outputTicketList 
+{
+  jiraBaseUrl="https://kanasoftware.jira.com/"
+  jiraTicketBaseUrl="${jiraBaseUrl}browse/"
+  jiraSearchBaseUrl="${jiraBaseUrl}issues/?jql="
+  ticketList=("$@")
+
+  echo "\nTickets found:"
+  for ticket in "${ticketList[@]}"
+  do
+      echo $jiraTicketBaseUrl$ticket
+  done
+
+  echo "\nSearch JQL:"
+  searchUrl=$jiraSearchBaseUrl"issueKey%20in%20("
+  for ticket in "${ticketList[@]}"
+  do
+      searchUrl=$searchUrl$ticket","
+  done
+  searchUrl=${searchUrl%,}
+  searchUrl="$searchUrl)"
+
+  echo $searchUrl
+  echo
+}
+
+function refreshBash
+{
+  source ~/.zshrc
+  echo "All changes applied"
+}
+
+function testSamplingPercentage
+{
+  cid=$1
+  sid=$2
+  for i in `seq 1 100`; do curl "https://cx.foresee.com/survey/invite?cid=${cid}&sid=${sid}"; done
+}
