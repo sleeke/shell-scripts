@@ -11,6 +11,7 @@ IFS=$'\n'
 # Import useful shell commands
 source ~/Documents/DEV/mobile-scripts/process-utility/textStyles.sh
 source ~/Documents/DEV/useful-scripts/shell-scripts/git.sh
+source ~/bash-scripts/playground.sh
 
 function returnToBase
 {
@@ -86,12 +87,21 @@ function sha
     echo
 }
 
+function bn
+{
+    branchName=$(git branch  --show-current)
+    echo -n $branchName | pbcopy
+    echo 
+    echo -e "> Copied branch name $blueText$branchName$normalText to clipboard"
+    echo
+}
+
 function buildNumber 
 {
     buildNumber=$(git rev-list --all --count)
     echo $buildNumber | pbcopy
     echo
-    echo "> Copied unique build number [$buildNumber] to clipboard."
+    echo "> Copied unique build number $blueText$buildNumber$normalText to clipboard."
     echo
 }
 
@@ -124,7 +134,9 @@ function verify
       ./gradlew testQaRelease
     fi    
 
+    # Open the results
     open sdk/tests/build/reports/tests/testQaReleaseUnitTest/index.html
+
   elif [[ "$currentFolder" == *foresee-sdk-ios* ]]
   then
     if [[ "$confirm" =~ ^[Yy]$ ]]
@@ -135,6 +147,12 @@ function verify
     else
       fastlane tests
     fi
+    
+    # Open the results
+    open builds/tmp/*.xml
+  elif [[ "$currentFolder" == *m-pathy-mobile-automation* ]]
+  then
+    ./gradlew clean -P=smokeSuite test --rerun-tasks  
   else
     echo -e $redText"\nRepo not recognized...\n"$normalText
   fi
@@ -188,16 +206,18 @@ function quickTests
   ./gradlew sdk:tests:testQaDebugUnitTest --tests "**$filename*" --rerun-tasks
 }
 
-# Test a command 100 times and drop out if failed, quoting number of successful attempts
+# Test a command until failure, quoting number of successful attempts
 function soak
 {
   numTests=0
   command=$1
   while "$command"
-  do numTests=numTests+1
+  do 
+    numTests=$((numTests+1))    
+    echo -e "\n$blueText$numTests successful runs so far...$normalText\n"
   done
 
-  echo "Tested $numTests times"
+  echo -e "\n$redText$numTests runs before failure$normalText\n"
 }
 
 function releaseNotes
@@ -264,4 +284,52 @@ function testSamplingPercentage
   cid=$1
   sid=$2
   for i in `seq 1 100`; do curl "https://cx.foresee.com/survey/invite?cid=${cid}&sid=${sid}"; done
+}
+
+function setJDK
+{
+  version=$1
+
+  if [[ "$version" == "11" ]]
+  then 
+    JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-11.jdk/Contents/Home"
+  elif [[ "$version" == "8" ]]
+  then 
+    JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_201.jdk/Contents/Home
+  fi
+
+  java -version
+}
+
+function automatedTests
+{
+  suiteFile=$1
+  ./gradlew -PsuiteFile=$suiteFile test --rerun-tasks
+
+  open ./build/reports/tests/test/index.html
+}
+
+function clearSdkArtefactsFromM2cache
+{
+  rm -rf ~/.m2/repository/com/verint/xm/sdk/core
+  rm -rf ~/.m2/repository/com/verint/xm/sdk/dba
+  rm -rf ~/.m2/repository/com/verint/xm/sdk/predictive
+  rm -rf ~/.m2/repository/com/verint/xm/sdk/digital
+}
+
+function searchEverywhere
+{
+  searchTerm=$1
+
+  # Google
+  open "https://www.google.com/search?q=${searchTerm}"
+  
+  # Sharepoint
+  open "https://verint.sharepoint.com/_layouts/15/sharepoint.aspx?q=${searchTerm}&v=%2Fsearch"
+  
+  # Confluence
+  open "https://kanasoftware.jira.com/wiki/search?text=${searchTerm}"
+
+  #Jira
+  open "https://kanasoftware.jira.com/issues/?jql=text%20~%20%22${searchTerm}%22%20order%20by%20updated%20desc"
 }
