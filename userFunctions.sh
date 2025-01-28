@@ -290,12 +290,15 @@ function setJDK
 {
   version=$1
 
-  if [[ "$version" == "11" ]]
+  if [[ "$version" == "18" ]]
+  then 
+    JAVA_HOME="/Library/Java/JavaVirtualMachines/alts/jdk-18.0.1.jdk/Contents/Home"
+  elif [[ "$version" == "11" ]]
   then 
     JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-11.jdk/Contents/Home"
   elif [[ "$version" == "8" ]]
   then 
-    JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_201.jdk/Contents/Home
+    JAVA_HOME=/Library/Java/JavaVirtualMachines/alts/jdk1.8.0_201.jdk/Contents/Home
   fi
 
   java -version
@@ -307,6 +310,7 @@ function automatedTests
   ./gradlew -PsuiteFile=$suiteFile test --rerun-tasks
 
   open ./build/reports/tests/test/index.html
+  rm -rf ./build/resources
 }
 
 function clearSdkArtefactsFromM2cache
@@ -332,4 +336,58 @@ function searchEverywhere
 
   #Jira
   open "https://kanasoftware.jira.com/issues/?jql=text%20~%20%22${searchTerm}%22%20order%20by%20updated%20desc"
+}
+
+function fetchAndRepeat
+{
+  git fetch; history -p !:0
+}
+
+function qaBuildIosSdk
+{
+  branch=$1
+  if [ -z "$branch" ]
+  then
+    branch="core"
+  fi
+
+  curl https://app.bitrise.io/app/8680baa58cb0b480/build/start.json -L --data '{"build_params":{"branch":"'$branch'","commit_message":"Ad-hoc QA build","workflow_id":"Build-QA-Automated"},"hook_info":{"build_trigger_token":"2XNwNb0fTrUdn7SwuM3IGQ","type":"bitrise"},"triggered_by":"curl"}'
+}
+
+function qaBuildAndroidSdk
+{
+  branch=$1
+  if [ -z "$branch" ]
+  then
+    branch="core"
+  fi
+
+  curl https://app.bitrise.io/app/2cec4f19031194c1/build/start.json -L --data '{"build_params":{"branch":"'$branch'","commit_message":"Ad-hoc QA build","workflow_id":"Build-QA-Automated"},"hook_info":{"build_trigger_token":"tWLcwoQ9i6OdRYMC2B31sQ","type":"bitrise"},"triggered_by":"curl"}'
+}
+
+function generateTestReport
+{
+  product=$1
+
+  predictive="%22%2FMobSDK%2FPredictive%20%26%20Digital%20App%2F**%22"
+  xmApp="%22%2FMobius%2FXM%20App%2F**%22"
+
+  if [[ "$product" == "predictive" ]]
+  then
+    productString=$predictive
+  elif [[ "$product" == "xm-app" ]]
+  then
+    productString=$xmApp
+  else
+    echo "Incorrect arguments; please select 'predictive' or 'xm-app'"
+  fi
+
+
+  twoWeeksAgo=$(date -r $(expr $(date +%s) - 1209600) +%Y-%m-%d)
+
+  if [ -n "$productString" ]
+  then 
+    echo "Generating a report for $product"
+    open "https://kanasoftware.jira.com/projects/VOC?selectedItem=com.atlassian.plugins.atlassian-connect-plugin:com.kanoah.test-manager__main-project-page#!/reports/testresults/board/view?tql=testResult.projectId%20IN%20(21079)%20AND%20testCase.priorityName%20IN%20(%22Critical%22)%20AND%20testResult.executionDate%20%3E%3D%20%27${twoWeeksAgo}%27%20AND%20testRun.folderName%20IN%20(${productString})%20AND%20testRun.statusName%20IN%20(%22Done%22)%20AND%20testRun.onlyLastTestResult%20IS%20true&epicJQL=&title=Test%20execution%20results%20(summary)&projectId=21079&traceabilityReportOption=COVERAGE_TEST_CASES&traceabilityTreeOption=COVERAGE_TEST_CASES&traceabilityCustomTreeDisplayOption=CONDENSED&traceabilityMatrixOption=COVERAGE_TEST_CASES&scorecardOption=EXECUTION_RESULTS&displayUnit=PERCENTAGE&period=WEEK&timezone=America%2FLos_Angeles"
+  fi
 }
